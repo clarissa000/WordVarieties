@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Generated data
+results/
+
+# Sage
+*.sage.py
+
+# Virtual environments
+.venv/
+env/
