@@ -1,10 +1,9 @@
 from sage.all import *
 from time import perf_counter
+import random
 
 R = PolynomialRing(QQ, ['x', 'y', 'z'])
 x,y,z = R.gens()
-
-memo = {}
 
 #A = a^-1
 def invert_letter(c):
@@ -30,7 +29,9 @@ def cyclic_reduce(word):
 def invert_word(word):
     return tuple(invert_letter(c) for c in reversed(word))
 
+#----------------------
 #GOLDMAN METHOD
+#----------------------
 def choose_split(word):
     word = cyclic_reduce(word)
     n = len(word)
@@ -42,7 +43,7 @@ def choose_split(word):
     #words are cyclically invariant
     for s, pos in positions.items():
         if len(pos) >= 2:
-            i, j = pos[0], pos[1]
+            i, j = pos[0], pos[len(pos)//2]
 
             # rotate so the word starts just after j
             # and ends at j, giving p s q s
@@ -54,7 +55,7 @@ def choose_split(word):
             return u1, u2
     return None
 
-def trace_poly_goldman(word):
+def trace_poly_goldman(word, memo = None):
     word = cyclic_reduce(word)
     if word in memo:
         return memo[word]
@@ -86,14 +87,16 @@ def trace_poly_goldman(word):
     u3 = free_reduce(u1 + invert_word(u2))
 
     #using the identity that tr(AB) = tr(A)tr(B) - tr(AB^-1)
-    ans = trace_poly_goldman(u1) * trace_poly_goldman(u2) - trace_poly_goldman(u3)
+    ans = trace_poly_goldman(u1, memo) * trace_poly_goldman(u2, memo) - trace_poly_goldman(u3, memo)
     memo[word] = ans
     return ans
 
+def trace_poly_goldman_fast(word):
+    return trace_poly_goldman(word, {})
+#----------------------
 #TRAINA METHOD
-memo_syl = {}
-
-# Chebyshev-type recurrences
+#----------------------
+# Chebyshev recurrences
 # T_0 = 2, T_1 = t, T_n = t*T_{n-1} - T_{n-2}
 def T(n, t):
     if not hasattr(T, "_cache"):
@@ -114,7 +117,6 @@ def T(n, t):
     cache[n] = t * T(n - 1, t) - T(n - 2, t)
     return cache[n]
 
-
 # P_{-1} = 0, P_0 = 1, P_n = t*P_{n-1} - P_{n-2}
 def P(n, t):
     if not hasattr(P, "_cache"):
@@ -131,7 +133,6 @@ def P(n, t):
 
     cache[n] = t * P(n - 1, t) - P(n - 2, t)
     return cache[n]
-
 
 def trailing_block(word):
     """
@@ -152,7 +153,6 @@ def trailing_block(word):
 
     prefix = word[:i + 1]
     return prefix, c, k
-
 
 def trace_poly_syllable(word, memo=None):
     if memo is None:
@@ -222,8 +222,6 @@ def trace_poly_syllable(word, memo=None):
 
     # otherwise fall back to Goldman split
     split = choose_split(word)
-    if split is None:
-        raise ValueError(f"No split found for word {word}")
 
     u1, u2 = split
     u3 = free_reduce(u1 + invert_word(u2))
@@ -235,47 +233,191 @@ def trace_poly_syllable(word, memo=None):
 def trace_poly_syllable_fast(word):
     return trace_poly_syllable(word, {})
 
-# -------------------------------------------------
+#----------------------
+#CAYLEY-HAMILTON DIRECT METHOD
+#----------------------
+def letter_var(c):
+    return x if c.lower() == 'a' else y
+
+def find_ch_step(word):
+    """
+    Find the first place where a Cayley-Hamilton rewrite applies.
+    """
+    word = cyclic_reduce(word)
+
+    # 1) adjacent equal letters
+    for i in range(len(word) - 1):
+        if word[i] == word[i + 1]:
+            c = word[i]
+            t = letter_var(c)
+
+            # U c c V = t * (U c V) - (U V)
+            keep_one = word[:i] + (c,) + word[i + 2:]
+            drop_both = word[:i] + word[i + 2:]
+            return ("pair", t, keep_one, drop_both)
+
+    # 2) inverses
+    for i, c in enumerate(word):
+        if c in ('A', 'B'):
+            lower = c.lower()
+            t = letter_var(c)
+
+            # U C V = t * (U V) - (U lower V)
+            drop_capital = word[:i] + word[i + 1:]
+            replace_lower = word[:i] + (lower,) + word[i + 1:]
+            return ("capital", t, drop_capital, replace_lower)
+
+    return None
+
+def trace_poly_CH(word, memo=None):
+    """
+    Cayley-Hamilton style trace polynomial.
+
+    Strategy:
+      - free/cyclic reduce
+      - use CH rewrites on repeated letters or capitals
+      - if no CH step applies, fall back to Goldman split
+    """
+    if memo is None:
+        memo = {}
+
+    word = cyclic_reduce(word)
+
+    if word in memo:
+        return memo[word]
+
+    n = len(word)
+
+    # base cases
+    if n == 0:
+        memo[word] = R(2)
+        return memo[word]
+
+    if n == 1:
+        ans = x if word[0] in ('a', 'A') else y
+        memo[word] = ans
+        return ans
+
+    if n == 2:
+        c, d = word
+
+        if c in ('a', 'A') and d in ('a', 'A'):
+            ans = x**2 - 2
+            memo[word] = ans
+            return ans
+        if c in ('b', 'B') and d in ('b', 'B'):
+            ans = y**2 - 2
+            memo[word] = ans
+            return ans
+
+        if (c, d) in [('a', 'b'), ('b', 'a'), ('A', 'B'), ('B', 'A')]:
+            ans = z
+            memo[word] = ans
+            return ans
+
+        if (c, d) in [('a', 'B'), ('B', 'a'), ('A', 'b'), ('b', 'A')]:
+            ans = x*y - z
+            memo[word] = ans
+            return ans
+
+    if n == 4 and len(set(word)) == 4:
+        ans = x**2 + y**2 + z**2 - x*y*z - 2
+        memo[word] = ans
+        return ans
+
+    # pure power shortcut
+    if len(set(word)) == 1:
+        c = word[0]
+        t = x if c.lower() == 'a' else y
+        ans = T(n, t)
+        memo[word] = ans
+        return ans
+
+    # CH rewrite step
+    step = find_ch_step(word)
+    if step is not None:
+        kind, t, w1, w2 = step
+        ans = t * trace_poly_CH(w1, memo) - trace_poly_CH(w2, memo)
+        memo[word] = ans
+        return ans
+
+    # fallback to Goldman split
+    split = choose_split(word)
+    if split is None:
+        raise ValueError(f"No split found for word {word}")
+
+    u1, u2 = split
+    u3 = free_reduce(u1 + invert_word(u2))
+
+    ans = trace_poly_CH(u1, memo) * trace_poly_CH(u2, memo) - trace_poly_CH(u3, memo)
+    memo[word] = ans
+    return ans
+
+def trace_poly_CH_fast(word):
+    return trace_poly_CH(word, {})
+
+#----------------------
+#Method 4 Matrix method
+#----------------------
+Pxyz = PolynomialRing(ZZ, names=('x', 'y', 'z'))
+x3, y3, z3 = Pxyz.gens()
+
+# Quadratic extension ring:
+#   R = Z[x,y,z,zeta]/(zeta^2 - z*zeta + 1)
+S = PolynomialRing(ZZ, names=('x', 'y', 'z', 'u'))
+xS, yS, zS, uS = S.gens()
+Rquad = S.quotient(uS**2 - zS*uS + 1, names=('x', 'y', 'z', 'u'))
+xq, yq, zq, uq = Rquad.gens()
+
+# Matrices from the paper
+Aq = Matrix(Rquad, [[xq, -1], [1, 0]])
+Bq = Matrix(Rquad, [[0, uq], [uq - zq, yq]])
+
+Aq_inv = Matrix(Rquad, [[0, 1], [-1, xq]])
+Bq_inv = Matrix(Rquad, [[yq, -uq], [zq - uq, 0]])
+
+GEN_MATS = {
+    'a': Aq,
+    'A': Aq_inv,
+    'b': Bq,
+    'B': Bq_inv,
+}
+
+def to_tuple_word(word):
+    if isinstance(word, str):
+        return tuple(word)
+    return tuple(word)
+
+def trace_poly_generic(word, reduce_first=True):
+    word = to_tuple_word(word)
+
+    if reduce_first:
+        word = free_reduce(word)
+
+    M = identity_matrix(Rquad, 2)
+    for c in word:
+        M = M * GEN_MATS[c]
+
+    tr = M.trace()
+
+    # lift from the quotient ring back to S
+    tr_lift = tr.lift()
+
+    # evaluate u = 0 to get the polynomial in x,y,z
+    eval_u0 = S.hom([xS, yS, zS, 0], Pxyz)
+    return eval_u0(tr_lift)
+
+def trace_poly_generic_fast(word):
+    return trace_poly_generic(word, reduce_first=True)
+
+#----------------------
 # COMPARISON / BENCHMARKING
-# -------------------------------------------------
-
-def benchmark_function(func, words, repeats=1):
-    start = perf_counter()
-    last = None
-    for _ in range(repeats):
-        for w in words:
-            last = func(w)
-    elapsed = perf_counter() - start
-    return elapsed, last
-
-
-def compare_goldman_and_syllable(words, repeats=1):
-    t_gold, last_gold = benchmark_function(trace_poly_goldman, words, repeats=repeats)
-    t_syl, last_syl = benchmark_function(trace_poly_syllable_fast, words, repeats=repeats)
-
-    return {
-        "goldman_time": t_gold,
-        "syllable_time": t_syl,
-        "speedup_factor": (t_gold / t_syl) if t_syl != 0 else None,
-        "last_goldman": last_gold,
-        "last_syllable": last_syl,
-    }
-
-words = [
-    "abAB",
-    "abbaAABaBA",
-    "aBAbabAB",
-    "aaabBBaBA"
-]
-
-#result = compare_goldman_and_syllable(words, repeats=10)
-#print(result)
-
-def compare_one_word(word, repeats=20):
+#----------------------
+def compare_one_word(word, repeats=100):
 
     start = perf_counter()
     for _ in range(repeats):
-        trace_poly_goldman(word)
+        trace_poly_goldman_fast(word)
     gold = perf_counter() - start
 
     start = perf_counter()
@@ -283,12 +425,34 @@ def compare_one_word(word, repeats=20):
         trace_poly_syllable_fast(word)
     syl = perf_counter() - start
 
+    '''start = perf_counter()
+    for _ in range(repeats):
+        trace_poly_CH_fast(word)
+    ch = perf_counter() - start
+
+    start = perf_counter()
+    for _ in range(repeats):
+        trace_poly_generic_fast(word)
+    gen = perf_counter() - start'''
+
     print(f"Length {len(word)} Word {word}")
     print(f"Goldman : {gold:.6f}s")
     print(f"Syllable: {syl:.6f}s")
-    print(f"Speedup : {gold/syl:.2f}x")
+    #print(f"Cayley-Hamilton: {ch:.6f}s")
+    #print(f"Matrix: {gen:.6f}s")
+    #print(f"Speedup G/S: {gold/syl:.2f}x")
+    #print(f"Speedup C/S: {ch/syl:.2f}x")
+    #print('\n')
+    return True if gold < syl else False
 
-compare_one_word("abbaAABaBA", repeats=100)
-compare_one_word("abbaBABaBA", repeats=100)
-compare_one_word("abABabABabABabAB", repeats=100)
-compare_one_word("aaaaabbbbbAAAAABBBBB", repeats=100)
+def random_word(length):
+    alphabet = ['a', 'b', 'A', 'B']
+    return ''.join(random.choice(alphabet) for _ in range(length))
+
+sum = 0
+count = 0
+for i in range(1, 10):
+    for _ in range(10):
+        count += 1
+        sum = sum + 1 if compare_one_word(random_word(5*i)) else sum
+print(sum / count)

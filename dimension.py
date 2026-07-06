@@ -1,7 +1,7 @@
 from sage.all import *
 
-R = PolynomialRing(QQ, ['x', 'y', 'z'])
-x,y,z = R.gens()
+R = PolynomialRing(QQ, ['x', 'y', 'z', 'u'])
+x,y,z,u = R.gens()
 
 memo = {}
 
@@ -88,11 +88,24 @@ def trace_poly(word):
     memo[word] = ans
     return ans
 
-while True:
-    word = input('Please enter your word: in the format \'aaBa\' where capitals represent inverses or \'X\' to exit \n')
-    if word == 'X':
-        break
-    elif set(word) <= set(['a', 'b', 'A', 'B']):
-        print(trace_poly(word))
-    else:
-        print('Invalid input')
+w = 'abAB'
+pw = trace_poly(w)
+paw = trace_poly('a' + w)
+pbw = trace_poly('b' + w)
+
+F = x**2 + y**2 + z**2 - x*y*z - 4
+I = ideal([pw - 2, paw - x, pbw - y, u*F - 1])
+Iwd = ideal([pw - 2, paw - x, pbw - y])
+
+Is = I._singular_()
+Gs = Is.groebner()
+
+Iwds = Iwd._singular_()
+Gwds = Iwds.groebner()
+
+print('Groebner Basis', Gs)
+print('Dimension' , singular.eval('dim(%s)' % Gs.name()))
+
+#Not sure what to do here as still has u in the ring - I think just subtract 1? 
+print('w D Groebner Basis', Gwds)
+print('w D Dimension' , singular.eval('dim(%s)' % Gwds.name()))
