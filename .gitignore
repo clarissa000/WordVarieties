@@ -20,3 +20,6 @@ results/
 # Virtual environments
 .venv/
 env/
+
+word_dimensions_canon.csv
+word_dimensions_canon_cardinality.csv
