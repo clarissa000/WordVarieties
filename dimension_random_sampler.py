@@ -1,7 +1,11 @@
 SAMPLE_SIZE = 20
-LENGTH = 20
+LENGTH = 15
 
-from sage import *
+from sage.all import *
+import random
+import pandas as pd
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 # Base ring for trace polynomials
 R3 = PolynomialRing(QQ, ['x', 'y', 'z'])
@@ -156,13 +160,11 @@ def dimension_two_rings(word):
     #print('Dimension of I3:')
     #print(I3.dimension())
 
-    #saturation method?
     ideal_F = ideal([F])
     ideal_axes = ideal([x*y, x*z, y*z])
 
     I3_cleaned = I3.saturation(ideal_F)[0]
     I3_cleaned = I3_cleaned.saturation(ideal_axes)[0]
-    basis = I3_cleaned.groebner_basis()
     dim = I3_cleaned.dimension()
     if dim == 0:
         dimv = I3_cleaned.vector_space_dimension()
@@ -173,20 +175,47 @@ def dimension_two_rings(word):
     #print(I3_cleaned.groebner_basis())
     #print('Dimension of I3 cleaned:')
     #print(I3_cleaned.dimension())
-    return I3.dimension(), dim, basis, dimv, dimr
+    return I3.dimension(), dim, dimv, dimr
 
 alphabet = ['a', 'b', 'A', 'B']
 inverse = {'a': 'A', 'A': 'a', 'b': 'B', 'B': 'b'}
 
-def word_generator(n):
-    #Generates a freely reduced word of length n
-    pass
+def random_reduced_word(n):
+    if n == 0:
+        return ""
+    
+    word = [random.choice(alphabet)]
+    
+    for _ in range(n - 1):
+        choices = [c for c in alphabet if c != inverse[word[-1]]]
+        word.append(random.choice(choices))
+    
+    return ''.join(word)
 
 new_rows = []
-for _ in range(SAMPLE_SIZE):
-    w = word_generator(LENGTH)
-    dim, dim2, basis, dimv, dimr = dimension_two_rings(w)
-    new_rows.append({"length":LENGTH, "word":w, "dimension":dim, "dimensionZDense":dim2, "gb basis":basis, "cardinality":dimv, "radical_cardinality":dimr})
+for _ in tqdm(range(SAMPLE_SIZE)):
+    w = random_reduced_word(LENGTH)
+    dim, dim2, dimv, dimr = dimension_two_rings(w)
+    new_rows.append({"length":LENGTH, "word":w, "dimension":dim, "dimensionZDense":dim2, "cardinality":dimv, "radical_cardinality":dimr})
         
-if new_rows <= 20:
-    print(new_rows)
+if len(new_rows) <= 20:
+    print("\nResults:")
+    for row in new_rows:
+        print(
+            f"length={row['length']:2d} | "
+            f"word={row['word']:<20} | "
+            f"dim={row['dimension']:>2} | "
+            f"ZDense={row['dimensionZDense']:>2} | "
+            f"card={row['cardinality']:>4} | "
+            f"rad_card={row['radical_cardinality']:>4}"
+    )
+
+df = pd.DataFrame(new_rows)
+counts = df['dimensionZDense'].value_counts().sort_index()
+print(counts)
+
+counts.plot(kind="bar")
+plt.xlabel("ZDense dimension")
+plt.ylabel("Count")
+plt.title("Distribution of ZDense dimension")
+plt.show()

@@ -19,8 +19,8 @@ R3 = PolynomialRing(QQ, ['x', 'y', 'z'])
 x, y, z = R3.gens()
 
 # Bigger ring for the ideal with u
-R10 = PolynomialRing(QQ, ['x', 'y', 'z', 'u', 'v11', 'v12', 'v21', 'v22', 'v31', 'v32'])
-x4, y4, z4, u, v11, v12, v21, v22, v31, v32 = R10.gens()
+#R10 = PolynomialRing(QQ, ['x', 'y', 'z', 'u', 'v11', 'v12', 'v21', 'v22', 'v31', 'v32'])
+#x4, y4, z4, u, v11, v12, v21, v22, v31, v32 = R10.gens()
 
 memo = {}
 
