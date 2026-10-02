@@ -192,6 +192,17 @@ def random_reduced_word(n):
     
     return ''.join(word)
 
+while True:
+    try:
+        SAMPLE_SIZE = int(input("Enter the sample size: "))
+        LENGTH = int(input("Enter the length: "))
+        if SAMPLE_SIZE > 0 and LENGTH > 0:
+            break
+        print("Both numbers must be positive integers.")
+    except ValueError:
+        print("Please enter valid integers.")
+
+
 new_rows = []
 for _ in tqdm(range(SAMPLE_SIZE)):
     w = random_reduced_word(LENGTH)

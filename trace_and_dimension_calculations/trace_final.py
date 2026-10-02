@@ -95,6 +95,7 @@ while True:
         break
     elif set(word) <= set(['a', 'b', 'A', 'B']):
         p = trace_poly(word)
+        print('Trace polynonmial')
         print(p)
     else:
         print('Invalid input')

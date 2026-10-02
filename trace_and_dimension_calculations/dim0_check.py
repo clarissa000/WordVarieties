@@ -1,4 +1,5 @@
 from sage.all import *
+import pandas as pd
 
 # Base ring for trace polynomials
 R3 = PolynomialRing(QQ, ['x', 'y', 'z'])
@@ -8,7 +9,16 @@ x, y, z = R3.gens()
 R10 = PolynomialRing(QQ, ['x', 'y', 'z', 'u', 'v11', 'v12', 'v21', 'v22', 'v31', 'v32'])
 x4, y4, z4, u, v11, v12, v21, v22, v31, v32 = R10.gens()
 
+sqrt2 = QQbar(sqrt(2))
+phi = (1 + QQbar(sqrt(5))) / 2
 
+E = {
+    QQbar(0),
+    QQbar(1), QQbar(-1),
+    sqrt2, -sqrt2,
+    phi, -phi,
+    1 - phi, -(1 - phi)
+}
 
 memo = {}
 
@@ -197,7 +207,134 @@ def saturation_method(word):
         print(J.radical().vector_space_dimension())
     print(analyse_groebner_basis(I3_cleaned.groebner_basis()))
 
-#dimension_two_rings('abAB')
+def finite_strongly_irreducible_point(point):
+    xv = QQbar(point[x])
+    yv = QQbar(point[y])
+    zv = QQbar(point[z])
 
-saturation_method('abaBAbaBabAB')
-#saturation_method('aaBAbaBBabAB')
+    # kappa = tr([A,B])
+    kappa = xv**2 + yv**2 + zv**2 - xv*yv*zv - 2
+
+    # No two of x,y,z are zero
+    if ((xv == 0 and yv == 0) or
+        (xv == 0 and zv == 0) or
+        (yv == 0 and zv == 0)):
+        return False
+
+    # kappa != 0
+    if kappa == 0:
+        return False
+
+    # x,y,z,kappa all lie in E
+    return (
+        xv in E and
+        yv in E and
+        zv in E and
+        kappa in E
+    )
+
+def analyse_dim0_word(word, verbose=True):
+
+    pw = trace_poly(word)
+    paw = trace_poly('a' + word)
+    pbw = trace_poly('b' + word)
+
+    F = x**2 + y**2 + z**2 - x*y*z - 4
+
+    I3 = ideal([
+        pw - 2,
+        paw - x,
+        pbw - y
+    ])
+
+    ideal_F = ideal([F])
+    ideal_axes = ideal([x*y, x*z, y*z])
+
+    # Same cleaning you already use
+    J = I3.saturation(ideal_F)[0]
+    J = J.saturation(ideal_axes)[0]
+
+    if J.dimension() != 0:
+        raise ValueError(
+            f"{word}: expected dimension 0, got {J.dimension()}"
+        )
+
+    solutions = J.variety(QQbar)
+
+    finite_points = []
+    zdense_points = []
+
+    for point in solutions:
+        if finite_strongly_irreducible_point(point):
+            finite_points.append(point)
+        else:
+            zdense_points.append(point)
+
+    if len(zdense_points) == 0:
+        zdense_dimension = -1
+    else:
+        zdense_dimension = 0
+
+    if verbose:
+        print("\n" + "=" * 70)
+        print("WORD:", word)
+        print("=" * 70)
+        print("Number of solutions:", len(solutions))
+        print("Finite strongly irreducible:", len(finite_points))
+        print("Non-finite:", len(zdense_points))
+        print("ZD dimension:", zdense_dimension)
+
+        if zdense_points:
+            print("\nNon-finite points:")
+            for p in zdense_points:
+                xv = QQbar(p[x])
+                yv = QQbar(p[y])
+                zv = QQbar(p[z])
+                kappa = xv**2 + yv**2 + zv**2 - xv*yv*zv - 2
+
+                print("  ", p)
+                print("     kappa =", kappa)
+
+    return zdense_dimension
+
+csv_in = "databases/word_dimensions_nogb.csv"
+csv_out = "databases/word_dimensions_canon_cardinality_ZDense.csv"
+
+df = pd.read_csv(csv_in)
+df = df[df["word"].str.len() <= 14]
+
+# Only the original dimension-0 cases
+dim0 = df[df["dimensionZDense"] == 0]
+
+print("Total words:", len(df))
+print("Dimension-0 words:", len(dim0))
+df["dimensionZDense"] = df["dimensionZDense"].astype(int)
+df["dimensionZDense2"] = df["dimensionZDense"]
+
+counter = 0
+
+for idx, row in dim0.iterrows():
+
+    counter += 1
+    word = row["word"]
+
+    #print(f"[{counter}/{len(dim0)}] {word}")
+
+    try:
+        zd_dim = analyse_dim0_word(word, verbose=False)
+        df.loc[idx, "dimensionZDense2"] = zd_dim
+
+    except Exception as e:
+        print(f"ERROR on {word}: {e}")
+        continue
+
+    # Save progress every 1000 words
+    if counter % 1000 == 0:
+        df.to_csv(csv_out, index=False)
+        print(f"--- Saved progress: {counter} words ---")
+
+# Final save
+df.to_csv(csv_out, index=False)
+
+print("DONE")
+print("Saved to:", csv_out)
