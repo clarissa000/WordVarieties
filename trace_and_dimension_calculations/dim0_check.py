@@ -221,10 +221,6 @@ def finite_strongly_irreducible_point(point):
         (yv == 0 and zv == 0)):
         return False
 
-    # kappa != 0
-    if kappa == 0:
-        return False
-
     # x,y,z,kappa all lie in E
     return (
         xv in E and
